@@ -1,12 +1,13 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Heart, Phone, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
-import { login } from "@/lib/auth";
+import { useAuth } from "@/contexts/AuthContext";
+import { useLoading } from "@/contexts/LoadingContext";
 
 const loginSchema = z.object({
   mobile: z.string().trim().min(10, { message: "Please enter a valid mobile number" }).max(15),
@@ -18,9 +19,19 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ mobile?: string; password?: string }>({});
-  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login, isAuthenticated } = useAuth();
+  const { withLoading } = useLoading();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      const from = (location.state as any)?.from?.pathname || "/dashboard";
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, navigate, location]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,18 +48,17 @@ const Login = () => {
       setErrors(fieldErrors);
       return;
     }
-
-    setIsLoading(true);
     
     try {
-      await login(mobile, password);
+      await withLoading(login(mobile, password));
       toast({
         title: "Login Successful",
         description: "Welcome back to Anagha Health Connect!",
       });
-      navigate("/dashboard");
+      // Redirect to intended page or dashboard
+      const from = (location.state as any)?.from?.pathname || "/dashboard";
+      navigate(from, { replace: true });
     } catch (error: any) {
-      setIsLoading(false);
       toast({
         title: "Login Failed",
         description: error.message || "Incorrect mobile number or password",
@@ -142,19 +152,11 @@ const Login = () => {
                 type="submit"
                 variant="hero"
                 className="w-full h-12"
-                disabled={isLoading}
               >
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                    Signing in...
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    Sign In
-                    <ArrowRight className="w-5 h-5" />
-                  </span>
-                )}
+                <span className="flex items-center gap-2">
+                  Sign In
+                  <ArrowRight className="w-5 h-5" />
+                </span>
               </Button>
             </form>
 
