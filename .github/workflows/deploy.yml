@@ -24,7 +24,8 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Upload build to cPanel
+      # STEP 1: Upload build to TEMP folder (no mkdir)
+      - name: Upload build to temp folder
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.FTP_HOST }}
@@ -32,5 +33,23 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           port: ${{ secrets.FTP_PORT }}
           source: "dist/*"
+<<<<<<< HEAD
           target: "/home/${{ secrets.FTP_USERNAME }}/public_html1
+=======
+          target: "/home/${{ secrets.FTP_USERNAME }}/deploy_tmp"
+>>>>>>> 8898c4f (new updates)
           strip_components: 1
+
+      # STEP 2: Activate build (clean + replace)
+      - name: Activate new build
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT }}
+          script: |
+            cd public_html1
+            rm -rf *
+            cp -r ~/deploy_tmp/* .
+            rm -rf ~/deploy_tmp/*
