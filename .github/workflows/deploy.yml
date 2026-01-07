@@ -33,11 +33,7 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           port: ${{ secrets.FTP_PORT }}
           source: "dist/*"
-<<<<<<< HEAD
-          target: "/home/${{ secrets.FTP_USERNAME }}/public_html1
-=======
-          target: "/home/${{ secrets.FTP_USERNAME }}/deploy_tmp"
->>>>>>> 8898c4f (new updates)
+          target: "/home/${{ secrets.FTP_USERNAME }}/public_html1"
           strip_components: 1
 
       # STEP 2: Activate build (clean + replace)
