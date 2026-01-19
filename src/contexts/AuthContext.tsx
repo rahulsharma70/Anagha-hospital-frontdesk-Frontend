@@ -88,6 +88,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     password: string;
     role?: string;
     email?: string;
+    address_line1?: string;
+    hospital_id?: number;
+    degree?: string;
+    institute_name?: string;
+    company_name?: string;
+    city?: string;
+    state?: string;
+    specialty?: string;
   }) => {
     const registeredUser = await authRegister(userData);
     setUser(registeredUser);

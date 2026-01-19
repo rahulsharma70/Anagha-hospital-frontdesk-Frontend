@@ -35,19 +35,19 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <LoadingProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
           <GlobalLoader />
-          <BrowserRouter>
-            <Routes>
+      <BrowserRouter>
+        <Routes>
               {/* Public routes */}
-              <Route path="/" element={<Index />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/register-hospital" element={<RegisterHospital />} />
-              <Route path="/book-appointment" element={<BookAppointment />} />
-              <Route path="/pharma-appointment" element={<PharmaBookAppointment />} />
+          <Route path="/" element={<Index />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/register-hospital" element={<RegisterHospital />} />
+          <Route path="/book-appointment" element={<BookAppointment />} />
+          <Route path="/pharma-appointment" element={<PharmaBookAppointment />} />
               
               {/* Protected routes */}
               <Route
@@ -90,28 +90,15 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              <Route
-                path="/payment"
-                element={
-                  <ProtectedRoute>
-                    <Payments />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/payments"
-                element={
-                  <ProtectedRoute>
-                    <Payments />
-                  </ProtectedRoute>
-                }
-              />
+              {/* Payment page - public (for hospital registration and guest bookings) */}
+              <Route path="/payment" element={<Payments />} />
+              <Route path="/payments" element={<Payments />} />
               
               {/* 404 */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </TooltipProvider>
       </LoadingProvider>
     </AuthProvider>
   </QueryClientProvider>

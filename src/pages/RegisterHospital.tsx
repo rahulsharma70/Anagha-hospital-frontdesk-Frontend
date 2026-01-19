@@ -169,10 +169,10 @@ const RegisterHospital = () => {
           // Fallback to default plans
           setPricingPlans([
             {
-              name: "Starter",
+              name: "Small Clinic",
               description: "For 1 Doctor / 1 Hospital",
-              installationPrice: 5000,
-              monthlyPrice: 1000,
+              installationPrice: 5001,
+              monthlyPrice: 1111,
               features: [
                 "1 Doctor profile",
                 "1 Hospital",
@@ -184,10 +184,10 @@ const RegisterHospital = () => {
               popular: false,
             },
             {
-              name: "Professional",
-              description: "For 5 Doctors in 1 Hospital",
-              installationPrice: 10000,
-              monthlyPrice: 2000,
+              name: "Medium (≤5 Drs)",
+              description: "For up to 5 Doctors in 1 Hospital",
+              installationPrice: 11000,
+              monthlyPrice: 2111,
               features: [
                 "Up to 5 Doctor profiles",
                 "1 Hospital",
@@ -200,10 +200,10 @@ const RegisterHospital = () => {
               popular: true,
             },
             {
-              name: "Enterprise",
+              name: "Corporate",
               description: "For 10 Doctors & 5 Hospitals",
-              installationPrice: 20000,
-              monthlyPrice: 5000,
+              installationPrice: 21000,
+              monthlyPrice: 5111,
               features: [
                 "Up to 10 Doctor profiles",
                 "Up to 5 Hospitals (same ownership)",
@@ -222,10 +222,10 @@ const RegisterHospital = () => {
         // Use default plans on error
         setPricingPlans([
           {
-            name: "Starter",
+            name: "Small Clinic",
             description: "For 1 Doctor / 1 Hospital",
-            installationPrice: 5000,
-            monthlyPrice: 1000,
+            installationPrice: 5001,
+            monthlyPrice: 1111,
             features: [
               "1 Doctor profile",
               "1 Hospital",
@@ -237,10 +237,10 @@ const RegisterHospital = () => {
             popular: false,
           },
           {
-            name: "Professional",
-            description: "For 5 Doctors in 1 Hospital",
-            installationPrice: 10000,
-            monthlyPrice: 2000,
+            name: "Medium (≤5 Drs)",
+            description: "For up to 5 Doctors in 1 Hospital",
+            installationPrice: 11000,
+            monthlyPrice: 2111,
             features: [
               "Up to 5 Doctor profiles",
               "1 Hospital",
@@ -253,10 +253,10 @@ const RegisterHospital = () => {
             popular: true,
           },
           {
-            name: "Enterprise",
+            name: "Corporate",
             description: "For 10 Doctors & 5 Hospitals",
-            installationPrice: 20000,
-            monthlyPrice: 5000,
+            installationPrice: 21000,
+            monthlyPrice: 5111,
             features: [
               "Up to 10 Doctor profiles",
               "Up to 5 Hospitals (same ownership)",

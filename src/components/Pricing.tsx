@@ -16,10 +16,10 @@ interface PricingPlan {
 
 const defaultPlans: PricingPlan[] = [
   {
-    name: "Starter",
+    name: "Small Clinic",
     description: "For 1 Doctor / 1 Hospital",
-    installationPrice: 5000,
-    monthlyPrice: 1000,
+    installationPrice: 5001,
+    monthlyPrice: 1111,
     features: [
       "1 Doctor profile",
       "1 Hospital",
@@ -32,10 +32,10 @@ const defaultPlans: PricingPlan[] = [
     cta: "Get Started",
   },
   {
-    name: "Professional",
-    description: "For 5 Doctors in 1 Hospital",
-    installationPrice: 10000,
-    monthlyPrice: 2000,
+    name: "Medium (≤5 Drs)",
+    description: "For up to 5 Doctors in 1 Hospital",
+    installationPrice: 11000,
+    monthlyPrice: 2111,
     features: [
       "Up to 5 Doctor profiles",
       "1 Hospital",
@@ -49,10 +49,10 @@ const defaultPlans: PricingPlan[] = [
     cta: "Get Started",
   },
   {
-    name: "Enterprise",
+    name: "Corporate",
     description: "For 10 Doctors & 5 Hospitals",
-    installationPrice: 20000,
-    monthlyPrice: 5000,
+    installationPrice: 21000,
+    monthlyPrice: 5111,
     features: [
       "Up to 10 Doctor profiles",
       "Up to 5 Hospitals (same ownership)",
@@ -95,7 +95,7 @@ const Pricing = () => {
                 monthlyPrice: monthlyPrice,
                 features: Array.isArray(plan.features) ? plan.features : [],
                 popular: plan.popular || false,
-                cta: plan.name === "Enterprise" ? "Contact Sales" : "Get Started",
+                cta: plan.name === "Corporate" ? "Contact Sales" : "Get Started",
               };
             } else {
               // Old format: has installationPrice and monthlyPrice
@@ -106,7 +106,7 @@ const Pricing = () => {
                 monthlyPrice: plan.monthlyPrice || plan.monthly || plan.monthly_price || 0,
                 features: Array.isArray(plan.features) ? plan.features : [],
                 popular: plan.popular || false,
-                cta: plan.name === "Enterprise" ? "Contact Sales" : "Get Started",
+                cta: plan.name === "Corporate" ? "Contact Sales" : "Get Started",
               };
             }
           });
@@ -197,17 +197,17 @@ const Pricing = () => {
               </div>
 
               <div className="text-center mb-6 space-y-2">
-                <div className="flex items-baseline justify-center gap-1">
+                <div className="flex flex-col items-center gap-1">
                   <span className="text-3xl lg:text-4xl font-bold text-foreground">
                     ₹{plan.installationPrice.toLocaleString('en-IN')}
                   </span>
-                  <span className="text-muted-foreground">/installation</span>
+                  <span className="text-muted-foreground text-xs text-center">One-Time Software Activation & License Fee</span>
                 </div>
-                <div className="flex items-baseline justify-center gap-1">
+                <div className="flex flex-col items-center gap-1">
                   <span className="text-xl font-semibold text-primary">
-                    + ₹{plan.monthlyPrice.toLocaleString('en-IN')}
+                    + ₹{plan.monthlyPrice.toLocaleString('en-IN')}/month
                   </span>
-                  <span className="text-muted-foreground text-sm">/month maintenance</span>
+                  <span className="text-muted-foreground text-xs text-center">Monthly Technical Support & Maintenance Charges</span>
                 </div>
               </div>
 

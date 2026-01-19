@@ -15,14 +15,15 @@ const baseSchema = z.object({
   name: z.string().trim().min(2, { message: "Name must be at least 2 characters" }).max(100),
   mobile: z.string().trim().min(10, { message: "Please enter a valid mobile number" }).max(15),
   password: z.string().min(8, { message: "Password must be at least 8 characters" }),
-  confirmPassword: z.string(),
-  email: z.string().optional(),
+  confirmPassword: z.string().min(1, { message: "Please confirm your password" }),
+  email: z.union([z.string().email({ message: "Invalid email format" }), z.literal("")]).optional(),
   address: z.string().optional(),
 });
 
 const doctorSchema = baseSchema.extend({
   degree: z.string().trim().min(2, { message: "Degree is required" }),
   institute_name: z.string().trim().min(2, { message: "Institute name is required" }),
+  hospital_id: z.string().trim().min(1, { message: "Hospital selection is required" }),
 });
 
 const pharmaSchema = baseSchema.extend({
@@ -58,6 +59,7 @@ const Register = () => {
     company_name: "",
   });
   const [hospitals, setHospitals] = useState<any[]>([]);
+  const [loadingHospitals, setLoadingHospitals] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -67,17 +69,27 @@ const Register = () => {
 
   useEffect(() => {
     const fetchHospitals = async () => {
-      try {
-        const hospitalsData = await hospitalsAPI.getApproved();
-        setHospitals(hospitalsData || []);
-      } catch (error) {
-        console.error("Error fetching hospitals:", error);
+      if (userType === "patient" || userType === "pharma" || userType === "doctor") {
+        setLoadingHospitals(true);
+        try {
+          console.log("🔵 DEBUG: Fetching hospitals for userType:", userType);
+          const hospitalsData = await hospitalsAPI.getApproved();
+          console.log("✅ DEBUG: Hospitals fetched:", hospitalsData);
+          setHospitals(hospitalsData || []);
+        } catch (error) {
+          console.error("❌ DEBUG: Error fetching hospitals:", error);
+          toast({
+            title: "Error",
+            description: "Failed to load hospitals. Please refresh the page.",
+            variant: "destructive",
+          });
+        } finally {
+          setLoadingHospitals(false);
+        }
       }
     };
-    if (userType === "patient" || userType === "pharma") {
-      fetchHospitals();
-    }
-  }, [userType]);
+    fetchHospitals();
+  }, [userType, toast]);
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
@@ -88,6 +100,8 @@ const Register = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("🔵 DEBUG: Form submit triggered, userType:", userType);
+    console.log("🔵 DEBUG: Form data:", formData);
     setErrors({});
 
     let schema;
@@ -99,29 +113,65 @@ const Register = () => {
       schema = baseSchema;
     }
 
-    const dataToValidate = {
-      ...formData,
-      ...(userType === "doctor" ? { degree: formData.degree, institute_name: formData.institute_name } : {}),
-      ...(userType === "pharma" ? { hospital_id: formData.hospital_id, company_name: formData.company_name } : {}),
+    // Build validation object with all required fields
+    const dataToValidate: any = {
+      name: formData.name || "",
+      mobile: formData.mobile || "",
+      password: formData.password || "",
+      confirmPassword: formData.confirmPassword || "",
+      email: formData.email || "",
+      address: formData.address || "",
     };
+    
+    // Add doctor-specific fields if userType is doctor
+    if (userType === "doctor") {
+      dataToValidate.degree = formData.degree || "";
+      dataToValidate.institute_name = formData.institute_name || "";
+      dataToValidate.hospital_id = formData.hospital_id || "";
+    }
+    
+    // Add pharma-specific fields if userType is pharma
+    if (userType === "pharma") {
+      dataToValidate.hospital_id = formData.hospital_id || "";
+      dataToValidate.company_name = formData.company_name || "";
+    }
+
+    console.log("🔵 DEBUG: Data to validate:", dataToValidate);
 
     const result = schema.safeParse(dataToValidate);
     
     if (!result.success) {
+      console.log("❌ DEBUG: Validation failed");
+      console.log("❌ DEBUG: Validation errors (raw):", JSON.stringify(result.error.errors, null, 2));
+      console.log("❌ DEBUG: Data that failed validation:", dataToValidate);
       const fieldErrors: FormErrors = {};
       result.error.errors.forEach((err) => {
-        const field = err.path[0] as keyof FormErrors;
-        fieldErrors[field] = err.message;
+        const field = err.path[0] as string;
+        console.log(`❌ DEBUG: Field error - ${field}: ${err.message}`);
+        fieldErrors[field as keyof FormErrors] = err.message;
       });
+      console.log("❌ DEBUG: Parsed field errors:", fieldErrors);
       setErrors(fieldErrors);
+      
+      // Show first error in toast
+      if (result.error.errors.length > 0) {
+        const firstError = result.error.errors[0];
+        toast({
+          title: "Validation Error",
+          description: `${firstError.path[0]}: ${firstError.message}`,
+          variant: "destructive",
+        });
+      }
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
+      console.log("❌ DEBUG: Passwords don't match");
       setErrors({ confirmPassword: "Passwords don't match" });
       return;
     }
 
+    console.log("✅ DEBUG: Validation passed, submitting...");
     setIsLoading(true);
     
     try {
@@ -143,6 +193,18 @@ const Register = () => {
       if (userType === "doctor") {
         registerData.degree = formData.degree;
         registerData.institute_name = formData.institute_name;
+        // Hospital ID is required for doctor registration
+        if (!formData.hospital_id) {
+          console.log("❌ DEBUG: Hospital ID missing for doctor");
+          toast({
+            title: "Validation Error",
+            description: "Please select a hospital",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+        registerData.hospital_id = parseInt(formData.hospital_id);
       }
 
       if (userType === "pharma") {
@@ -154,13 +216,26 @@ const Register = () => {
         registerData.hospital_id = parseInt(formData.hospital_id);
       }
 
+      console.log("🔵 DEBUG: Final register data to send:", registerData);
       await register(registerData);
+      console.log("✅ DEBUG: Registration successful");
       toast({
         title: "Registration Successful",
         description: `Welcome to Anagha Health Connect! Your ${userType} account has been created.`,
       });
-      navigate("/dashboard");
+      
+      // Navigate to role-specific dashboard
+      if (role === "patient") {
+        navigate("/patient-dashboard");
+      } else if (role === "doctor") {
+        navigate("/doctor-dashboard");
+      } else if (role === "pharma") {
+        navigate("/pharma-dashboard");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (error: any) {
+      console.error("❌ DEBUG: Registration error in handleSubmit:", error);
       setIsLoading(false);
       toast({
         title: "Registration Failed",
@@ -364,6 +439,40 @@ const Register = () => {
                       />
                     </div>
                     {errors.institute_name && <p className="text-sm text-destructive">{errors.institute_name}</p>}
+                  </div>
+
+                  {/* Hospital Selection for Doctors (Required) */}
+                  <div className="space-y-2">
+                    <Label htmlFor="hospital_id" className="text-foreground font-medium">
+                      Hospital <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground z-10" />
+                      <select
+                        id="hospital_id"
+                        value={formData.hospital_id}
+                        onChange={handleChange("hospital_id")}
+                        disabled={loadingHospitals}
+                        className={`w-full h-12 rounded-md border bg-background pl-10 pr-3 text-foreground ${errors.hospital_id ? "border-destructive" : "border-input"} ${loadingHospitals ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        <option value="">
+                          {loadingHospitals ? "Loading hospitals..." : "Select hospital"}
+                        </option>
+                        {hospitals.length > 0 ? (
+                          hospitals.map((h) => (
+                            <option key={h.id} value={h.id}>{h.name}</option>
+                          ))
+                        ) : !loadingHospitals ? (
+                          <option value="" disabled>No hospitals available</option>
+                        ) : null}
+                      </select>
+                    </div>
+                    {errors.hospital_id && <p className="text-sm text-destructive">{errors.hospital_id}</p>}
+                    {!loadingHospitals && hospitals.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        No hospitals available. Please contact support.
+                      </p>
+                    )}
                   </div>
                 </>
               )}

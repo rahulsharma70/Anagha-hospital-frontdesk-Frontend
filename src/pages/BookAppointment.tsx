@@ -81,15 +81,24 @@ const BookAppointment = () => {
   
   const verificationPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasCheckedPaymentOnMountRef = useRef(false);
+  const hasFetchedDataRef = useRef(false);
 
   // Load Cashfree SDK
   useEffect(() => {
     const loadCashfree = async () => {
       try {
-        await load();
-        console.log("Cashfree SDK loaded successfully");
-      } catch (error) {
-        console.error("Failed to load Cashfree SDK:", error);
+        console.log("🔵 DEBUG: Loading Cashfree SDK...");
+        const cashfree = await load();
+        console.log("✅ DEBUG: Cashfree SDK loaded successfully", cashfree);
+        // Verify SDK is properly initialized
+        if (cashfree && typeof cashfree.checkout === 'function') {
+          console.log("✅ DEBUG: Cashfree checkout method available");
+        } else {
+          console.error("❌ DEBUG: Cashfree checkout method not available");
+        }
+      } catch (error: any) {
+        console.error("❌ DEBUG: Failed to load Cashfree SDK:", error);
+        console.error("❌ DEBUG: Error details:", error.message, error.stack);
       }
     };
     loadCashfree();
@@ -143,15 +152,23 @@ const BookAppointment = () => {
         setPaymentStatus("success");
         clearPaymentState();
         
-        toast({
-          title: "Payment Successful",
-          description: "Your booking has been confirmed!",
-        });
-
-        // Redirect to appointments page after short delay
-        setTimeout(() => {
-          navigate("/my-appointments");
-        }, 2000);
+        if (isAuthenticated) {
+          toast({
+            title: "Payment Successful",
+            description: "Your booking has been confirmed! Redirecting to your dashboard...",
+          });
+          // Redirect to patient dashboard (appointment history will be updated there)
+          setTimeout(() => {
+            navigate("/patient-dashboard");
+          }, 2000);
+        } else {
+          toast({
+            title: "Payment Successful",
+            description: "Your booking has been confirmed! A confirmation email has been sent to you.",
+          });
+          // For guest users, show success message (email is sent by backend webhook)
+          // User can continue or go home
+        }
         
         return true;
       } else if (statusResponse.status === "FAILED") {
@@ -236,10 +253,18 @@ const BookAppointment = () => {
     };
   }, []);
 
-  // Load hospitals and doctors
+  // Load hospitals and doctors - only once on mount
   useEffect(() => {
+    // Prevent duplicate calls
+    if (hasFetchedDataRef.current) return;
+    hasFetchedDataRef.current = true;
+
+    let isMounted = true;
+
     const fetchData = async () => {
+      setLoadingData(true);
       setLoading(true);
+      
       try {
         const [hospitalsData, doctorsData] = await Promise.all([
           hospitalsAPI.getApproved().catch((err) => {
@@ -252,30 +277,43 @@ const BookAppointment = () => {
           }),
         ]);
         
-        setHospitals(hospitalsData || []);
-        setDoctors(doctorsData || []);
-        
-        if ((!hospitalsData || hospitalsData.length === 0) && (!doctorsData || doctorsData.length === 0)) {
-          toast({
-            title: "No Data Available",
-            description: "Unable to load hospitals and doctors. Please check your connection and try again.",
-            variant: "destructive",
-          });
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setHospitals(hospitalsData || []);
+          setDoctors(doctorsData || []);
+          
+          if ((!hospitalsData || hospitalsData.length === 0) && (!doctorsData || doctorsData.length === 0)) {
+            toast({
+              title: "No Data Available",
+              description: "Unable to load hospitals and doctors. Please check your connection and try again.",
+              variant: "destructive",
+            });
+          }
         }
       } catch (error: any) {
         console.error("Error fetching data:", error);
-        toast({
-          title: "Error",
-          description: error.message || "Failed to load hospitals and doctors. Please refresh the page.",
-          variant: "destructive",
-        });
+        if (isMounted) {
+          toast({
+            title: "Error",
+            description: error.message || "Failed to load hospitals and doctors. Please refresh the page.",
+            variant: "destructive",
+          });
+        }
       } finally {
-        setLoadingData(false);
-        setLoading(false);
+        if (isMounted) {
+          setLoadingData(false);
+          setLoading(false);
+        }
       }
     };
+
     fetchData();
-  }, [toast, setLoading]);
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Empty dependency array - only run once on mount
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
@@ -301,17 +339,6 @@ const BookAppointment = () => {
       return;
     }
 
-    // Check authentication
-    if (!isAuthenticated) {
-      toast({
-        title: "Authentication Required",
-        description: "Please login to book an appointment.",
-        variant: "destructive",
-      });
-      navigate("/login", { state: { from: "/book-appointment" } });
-      return;
-    }
-
     setIsSubmitting(true);
     setLoading(true);
 
@@ -327,15 +354,39 @@ const BookAppointment = () => {
       const timeSlot = formData.time.includes(":") ? formData.time.substring(0, 5) : formData.time;
 
       // Step 1: Create booking (status: pending)
+      // Support both authenticated users and guests
       let bookingResult: any;
       if (bookingType === "appointment") {
-        bookingResult = await appointmentsAPI.book({
-          doctor_id: selectedDoctor.id,
-          date: formData.date,
-          time_slot: timeSlot,
-          reason: formData.notes || undefined,
-        });
+        if (isAuthenticated) {
+          // Authenticated user booking
+          bookingResult = await appointmentsAPI.book({
+            doctor_id: selectedDoctor.id,
+            date: formData.date,
+            time_slot: timeSlot,
+            reason: formData.notes || undefined,
+          });
+        } else {
+          // Guest booking (no auth required)
+          bookingResult = await appointmentsAPI.bookGuest({
+            patient_name: formData.patientName,
+            patient_phone: formData.phone,
+            doctor_id: selectedDoctor.id,
+            date: formData.date,
+            time_slot: timeSlot,
+            reason: formData.notes || undefined,
+          });
+        }
       } else {
+        // Operations still require authentication
+        if (!isAuthenticated) {
+          toast({
+            title: "Authentication Required",
+            description: "Please login to book an operation.",
+            variant: "destructive",
+          });
+          navigate("/login", { state: { from: "/book-appointment" } });
+          return;
+        }
         bookingResult = await operationsAPI.book({
           hospital_id: selectedHospital.id,
           doctor_id: selectedDoctor.id,
@@ -354,7 +405,7 @@ const BookAppointment = () => {
         operation_id: bookingType === "operation" ? bookingResult.id : undefined,
         amount: defaultAmount,
         currency: "INR",
-      });
+      }, !isAuthenticated); // Pass isGuest flag
 
       if (!orderData || !orderData.payment_session_id) {
         throw new Error("Failed to create payment order");
@@ -372,35 +423,20 @@ const BookAppointment = () => {
       setPaymentState(pendingState);
       localStorage.setItem(PAYMENT_STATE_KEY, JSON.stringify(pendingState));
 
-      // Step 4: Open Cashfree payment checkout
-      try {
-        const cashfree = await load();
-        
-        const checkoutOptions = {
-          paymentSessionId: orderData.payment_session_id,
-          redirectTarget: "_self" as const,
-        };
-
-        // Open Cashfree checkout
-        cashfree.checkout(checkoutOptions);
-        
-        // Set status to pending - we'll verify via backend after redirect
-        setPaymentStatus("pending");
-        
-        // Start polling for payment status
-        startPaymentVerification(orderData.payment_id);
-        
-      } catch (error: any) {
-        setPaymentStatus("failed");
-        setVerificationError(error.message || "Failed to initialize payment. Please try again.");
-        clearPaymentState();
-        
-        toast({
-          title: "Payment Error",
-          description: error.message || "Failed to initialize payment. Please try again.",
-          variant: "destructive",
-        });
-      }
+      // Step 4: Redirect to payments page with payment details
+      // Store payment info in localStorage for payments page
+      const paymentInfo = {
+        payment_id: orderData.payment_id,
+        payment_session_id: orderData.payment_session_id,
+        amount: defaultAmount,
+        booking_id: bookingResult.id,
+        booking_type: bookingType,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem('pending_payment_info', JSON.stringify(paymentInfo));
+      
+      // Redirect to payments page
+      navigate(`/payments?appointment=${bookingResult.id}&payment=${orderData.payment_id}&session=${orderData.payment_session_id}`);
     } catch (error: any) {
       console.error("Booking error:", error);
       setPaymentStatus("failed");
@@ -501,8 +537,28 @@ const BookAppointment = () => {
                         Payment Successful!
                       </p>
                       <p className="text-xs text-green-700 dark:text-green-300 mt-1">
-                        Your booking has been confirmed. Redirecting to appointments...
+                        {isAuthenticated 
+                          ? "Your booking has been confirmed. Redirecting to your dashboard..."
+                          : "Your booking has been confirmed! A confirmation email has been sent to you."}
                       </p>
+                      {!isAuthenticated && (
+                        <div className="mt-3 flex gap-2">
+                          <Button
+                            onClick={() => navigate("/")}
+                            variant="outline"
+                            size="sm"
+                          >
+                            Go to Home
+                          </Button>
+                          <Button
+                            onClick={() => navigate("/book-appointment")}
+                            variant="hero"
+                            size="sm"
+                          >
+                            Book Another
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                   
@@ -649,24 +705,44 @@ const BookAppointment = () => {
                   {errors.date && <p className="text-sm text-destructive">{errors.date}</p>}
                 </div>
 
-                {/* Time */}
-                <div className="space-y-2">
-                  <Label htmlFor="time" className="text-foreground font-medium">
-                    Preferred Time
-                  </Label>
-                  <div className="relative">
-                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="time"
-                      type="time"
-                      value={formData.time}
-                      onChange={handleChange("time")}
-                      disabled={isSubmitting || paymentStatus === "verifying"}
-                      className={`pl-10 h-12 ${errors.time ? "border-destructive" : ""}`}
-                    />
-                  </div>
-                  {errors.time && <p className="text-sm text-destructive">{errors.time}</p>}
+              {/* Time */}
+              <div className="space-y-2">
+                <Label htmlFor="time" className="text-foreground font-medium">
+                  Preferred Time
+                </Label>
+                <div className="relative">
+                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground z-10 pointer-events-none" />
+                  <select
+                    id="time"
+                    value={formData.time}
+                    onChange={handleChange("time")}
+                    disabled={isSubmitting || paymentStatus === "verifying"}
+                    className={`w-full h-12 rounded-md border bg-background pl-10 pr-3 text-foreground ${errors.time ? "border-destructive" : "border-input"} disabled:opacity-50 disabled:cursor-not-allowed appearance-none`}
+                  >
+                    <option value="">Select time</option>
+                    <option value="09:30">09:30 AM</option>
+                    <option value="10:00">10:00 AM</option>
+                    <option value="10:30">10:30 AM</option>
+                    <option value="11:00">11:00 AM</option>
+                    <option value="11:30">11:30 AM</option>
+                    <option value="12:00">12:00 PM</option>
+                    <option value="12:30">12:30 PM</option>
+                    <option value="13:00">01:00 PM</option>
+                    <option value="13:30">01:30 PM</option>
+                    <option value="14:00">02:00 PM</option>
+                    <option value="14:30">02:30 PM</option>
+                    <option value="15:00">03:00 PM</option>
+                    <option value="15:30">03:30 PM</option>
+                    <option value="18:00">06:00 PM</option>
+                    <option value="18:30">06:30 PM</option>
+                    <option value="19:00">07:00 PM</option>
+                    <option value="19:30">07:30 PM</option>
+                    <option value="20:00">08:00 PM</option>
+                    <option value="20:30">08:30 PM</option>
+                  </select>
                 </div>
+                {errors.time && <p className="text-sm text-destructive">{errors.time}</p>}
+              </div>
               </div>
 
               {/* Specialty */}

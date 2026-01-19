@@ -7,7 +7,8 @@ import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'ax
 
 // API Base URL - use environment variable for production API domain
 // Set VITE_API_BASE_URL in .env file: VITE_API_BASE_URL=https://api.anaghahealthconnect.com
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+// Default to localhost:3000 for development
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
@@ -154,8 +155,13 @@ export const authAPI = {
     city?: string;
     state?: string;
     specialty?: string;
+    hospital_id?: number;
+    degree?: string;
+    institute_name?: string;
   }) => {
-    const response = await apiClient.post<{ access_token: string; token_type: string; user: any; message?: string }>('/api/users/register', userData);
+    // Use different endpoint for doctor registration
+    const endpoint = userData.role === 'doctor' ? '/api/users/register-doctor' : '/api/users/register';
+    const response = await apiClient.post<{ access_token: string; token_type: string; user: any; message?: string }>(endpoint, userData);
     return response.data;
   },
 
@@ -211,7 +217,7 @@ export const doctorsAPI = {
 
 // Appointments API
 export const appointmentsAPI = {
-  // Book appointment
+  // Book appointment (authenticated user)
   book: async (appointmentData: {
     doctor_id: number;
     date: string;
@@ -220,6 +226,55 @@ export const appointmentsAPI = {
   }) => {
     const response = await apiClient.post<any>('/api/appointments/book', appointmentData);
     return response.data;
+  },
+
+  // Book appointment as guest (no auth required)
+  bookGuest: async (appointmentData: {
+    patient_name: string;
+    patient_phone: string;
+    doctor_id: number;
+    date: string;
+    time_slot: string;
+    reason?: string;
+  }) => {
+    // Guest booking doesn't require auth token, so use fetch directly
+    console.log("📤 Sending guest booking request:", appointmentData);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/appointments/book-guest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(appointmentData),
+        signal: AbortSignal.timeout(30000), // 30 second timeout
+      });
+
+      console.log("📥 Response status:", response.status, response.statusText);
+
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+          console.error("❌ Error response:", errorData);
+        } catch {
+          const text = await response.text();
+          errorData = { detail: `HTTP error! status: ${response.status}`, body: text };
+          console.error("❌ Error response (non-JSON):", text);
+        }
+        throw new Error(errorData.detail || errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("✅ Booking successful:", result);
+      return result;
+    } catch (error: any) {
+      console.error("❌ Booking error:", error);
+      if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+        throw new Error("Request timed out. Please check your connection and try again.");
+      }
+      throw error;
+    }
   },
 
   // Get my appointments
@@ -306,13 +361,42 @@ export const operationsAPI = {
 
 // Payments API
 export const paymentsAPI = {
-  // Create payment order for appointments/operations
+  // Create payment order for appointments/operations (supports both authenticated and guest)
   createOrder: async (orderData: {
     appointment_id?: number;
     operation_id?: number;
     amount: number;
     currency?: string;
-  }) => {
+  }, isGuest: boolean = false) => {
+    // For guest bookings, use fetch directly without auth token
+    if (isGuest) {
+      const response = await fetch(`${API_BASE_URL}/api/payments/create-order-guest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          appointment_id: orderData.appointment_id || null,
+          operation_id: orderData.operation_id || null,
+          amount: orderData.amount,
+          currency: orderData.currency || 'INR',
+        }),
+      });
+
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { detail: `HTTP error! status: ${response.status}` };
+        }
+        throw new Error(errorData.detail || errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      return response.json();
+    }
+    
+    // For authenticated users, use axios with token
     const response = await apiClient.post<any>('/api/payments/create-order', {
       appointment_id: orderData.appointment_id || null,
       operation_id: orderData.operation_id || null,
@@ -323,13 +407,30 @@ export const paymentsAPI = {
   },
 
   // Create hospital registration payment order
-  createHospitalRegistrationOrder: async (planName: string, amount: number) => {
+  createHospitalRegistrationOrder: async (
+    planName: string, 
+    amount: number,
+    customerName?: string,
+    customerPhone?: string,
+    customerEmail?: string
+  ) => {
+    console.log("🔵 FRONTEND DEBUG: Creating hospital payment order", {
+      planName,
+      amount,
+      customerName,
+      customerPhone,
+      customerEmail
+    });
     const response = await apiClient.post<any>('/api/payments/create-order-hospital', {
       hospital_registration: true,
       plan_name: planName,
       amount: amount,
       currency: 'INR',
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_email: customerEmail,
     });
+    console.log("🔵 FRONTEND DEBUG: Payment order response", response.data);
     return response.data;
   },
 

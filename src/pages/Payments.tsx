@@ -8,30 +8,51 @@ import { useToast } from "@/hooks/use-toast";
 import { paymentsAPI, apiRequest } from "@/lib/api";
 import { load } from "@cashfreepayments/cashfree-js";
 
+// Cashfree SDK instance (singleton pattern)
+let cashfreeInstance: any = null;
+
+// Get Cashfree SDK instance with proper mode configuration
+// IMPORTANT: Mode must match backend CASHFREE_API_URL:
+// - "sandbox" for https://sandbox.cashfree.com/pg
+// - "production" for https://api.cashfree.com/pg
+const getCashfree = async () => {
+  if (!cashfreeInstance) {
+    // Default to production to match backend default (https://api.cashfree.com/pg)
+    const mode = import.meta.env.VITE_CASHFREE_MODE || "production"; // "sandbox" | "production"
+    console.log("🔵 DEBUG: Loading Cashfree SDK with mode:", mode);
+    console.log("🔵 DEBUG: Backend should use:", mode === "sandbox" ? "https://sandbox.cashfree.com/pg" : "https://api.cashfree.com/pg");
+    cashfreeInstance = await load({
+      mode: mode as "sandbox" | "production",
+    });
+    console.log("✅ DEBUG: Cashfree SDK loaded successfully", cashfreeInstance);
+  }
+  return cashfreeInstance;
+};
+
 type PaymentMethod = "upi" | "card";
 
 const packages = [
   {
-    id: "starter",
-    name: "Starter",
-    installation: 5000,
-    monthly: 1000,
+    id: "small-clinic",
+    name: "Small Clinic",
+    installation: 5001,
+    monthly: 1111,
     features: ["Basic Appointment System", "Up to 5 Doctors", "Email Support", "Basic Analytics"],
     popular: false,
   },
   {
-    id: "professional",
-    name: "Professional",
-    installation: 10000,
-    monthly: 2000,
+    id: "medium",
+    name: "Medium (≤5 Drs)",
+    installation: 11000,
+    monthly: 2111,
     features: ["Advanced Booking System", "Up to 25 Doctors", "Priority Support", "Advanced Analytics", "Payment Integration"],
     popular: true,
   },
   {
-    id: "enterprise",
-    name: "Enterprise",
-    installation: 20000,
-    monthly: 5000,
+    id: "corporate",
+    name: "Corporate",
+    installation: 21000,
+    monthly: 5111,
     features: ["Unlimited Doctors", "24/7 Dedicated Support", "Custom Integrations", "White-label Solution", "Multi-branch Support"],
     popular: false,
   },
@@ -49,6 +70,9 @@ const Payments = () => {
   const paymentType = searchParams.get("type"); // "hospital_registration" or null
   const planName = searchParams.get("plan");
   const amountParam = searchParams.get("amount");
+  const appointmentId = searchParams.get("appointment");
+  const paymentId = searchParams.get("payment");
+  const paymentSessionId = searchParams.get("session");
   
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("upi");
@@ -63,21 +87,93 @@ const Payments = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentOrder, setPaymentOrder] = useState<any>(null);
   const [hospitalData, setHospitalData] = useState<any>(null);
+  const [appointmentPaymentData, setAppointmentPaymentData] = useState<{
+    appointmentId: string;
+    paymentId: string;
+    paymentSessionId: string;
+  } | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Load Cashfree SDK
-  useEffect(() => {
-    const loadCashfree = async () => {
-      try {
-        await load();
-        console.log("Cashfree SDK loaded successfully");
-      } catch (error) {
-        console.error("Failed to load Cashfree SDK:", error);
+  // Helper function to open Cashfree checkout
+  const openCashfreeCheckout = async (paymentSessionId: string) => {
+    try {
+      console.log("🚀 Opening Cashfree checkout", paymentSessionId);
+      console.log("🔵 DEBUG: Payment session ID:", paymentSessionId);
+      setIsProcessing(true);
+
+      const cashfree = await getCashfree();
+      console.log("✅ DEBUG: Cashfree instance:", cashfree);
+      console.log("✅ DEBUG: Available methods:", Object.keys(cashfree || {}));
+      
+      // Check which methods are available
+      const hasPay = typeof cashfree?.pay === 'function';
+      const hasCheckout = typeof cashfree?.checkout === 'function';
+      console.log("✅ DEBUG: pay method exists:", hasPay);
+      console.log("✅ DEBUG: checkout method exists:", hasCheckout);
+
+      const checkoutOptions = {
+        paymentSessionId,
+        redirectTarget: "_self" as const,
+      };
+      console.log("🔵 DEBUG: Checkout options:", checkoutOptions);
+
+      // Use checkout() method (standard Cashfree JS SDK method)
+      if (hasCheckout) {
+        console.log("🔵 DEBUG: Using cashfree.checkout() method");
+        cashfree.checkout(checkoutOptions);
+        console.log("✅ cashfree.checkout() called successfully");
+        // checkout() is synchronous and will redirect, so don't reset isProcessing
+      } else if (hasPay) {
+        console.log("🔵 DEBUG: Using cashfree.pay() method (checkout not available)");
+        // pay() might return a promise or need different handling
+        const result = await cashfree.pay(checkoutOptions);
+        console.log("✅ cashfree.pay() result:", result);
+      } else {
+        throw new Error("Neither pay() nor checkout() method available on Cashfree SDK");
       }
-    };
-    loadCashfree();
-  }, []);
+    } catch (err: any) {
+      console.error("❌ Cashfree payment failed:", err);
+      console.error("❌ Error details:", err?.message, err?.stack);
+      setIsProcessing(false);
+      toast({
+        title: "Payment Error",
+        description: err?.message || "Unable to open payment gateway. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle appointment payment - check URL params or localStorage (DO NOT AUTO-OPEN)
+  useEffect(() => {
+    if (appointmentId && paymentId && paymentSessionId) {
+      setAppointmentPaymentData({
+        appointmentId,
+        paymentId,
+        paymentSessionId,
+      });
+      // Don't auto-open - show "Resume Payment" button instead
+      console.log("🔵 DEBUG: Payment session found in URL - showing resume button");
+    } else {
+      // Check localStorage for pending payment
+      const stored = localStorage.getItem('pending_payment_info');
+      if (stored) {
+        try {
+          const paymentInfo = JSON.parse(stored);
+          if (paymentInfo.booking_type === 'appointment' && paymentInfo.payment_session_id) {
+            setAppointmentPaymentData({
+              appointmentId: String(paymentInfo.booking_id),
+              paymentId: String(paymentInfo.payment_id),
+              paymentSessionId: paymentInfo.payment_session_id,
+            });
+            console.log("🔵 DEBUG: Payment session found in localStorage - showing resume button");
+          }
+        } catch (error) {
+          console.error("Error loading payment info:", error);
+        }
+      }
+    }
+  }, [appointmentId, paymentId, paymentSessionId]);
 
   // Load hospital registration data if coming from registration
   useEffect(() => {
@@ -119,10 +215,15 @@ const Payments = () => {
       setIsProcessing(true);
       try {
         // Create payment order for hospital registration
+        console.log("🔵 FRONTEND DEBUG: Creating payment order with hospital data", hospitalData);
         const orderData = await paymentsAPI.createHospitalRegistrationOrder(
           hospitalData.selectedPlan.name,
-          hospitalData.selectedPlan.installationPrice
+          hospitalData.selectedPlan.installationPrice,
+          hospitalData.formData?.hospitalName || hospitalData.formData?.name,
+          hospitalData.formData?.phone || hospitalData.formData?.mobile,
+          hospitalData.formData?.email
         );
+        console.log("🔵 FRONTEND DEBUG: Payment order created", orderData);
 
         if (!orderData || !orderData.payment_session_id) {
           throw new Error("Invalid payment order response. Missing payment_session_id.");
@@ -130,30 +231,10 @@ const Payments = () => {
 
         setPaymentOrder(orderData);
 
-        // Open Cashfree checkout
-        try {
-          const cashfree = await load();
-          
-          const checkoutOptions = {
-            paymentSessionId: orderData.payment_session_id,
-            redirectTarget: "_self" as const
-          };
-
-          cashfree.checkout(checkoutOptions);
-          
-          // Cashfree will handle the payment flow and redirect
-          // Payment status will be updated via webhook
-          setIsProcessing(true);
-        } catch (error: any) {
-          setIsProcessing(false);
-          toast({
-            title: "Payment Error",
-            description: error.message || "Failed to initialize payment. Please try again.",
-            variant: "destructive",
-          });
-        }
+        // Open Cashfree checkout using cashfree.pay()
+        await openCashfreeCheckout(orderData.payment_session_id);
       } catch (error: any) {
-        console.error("Error creating payment order:", error);
+        console.error("❌ DEBUG: Error creating payment order:", error);
         setIsProcessing(false);
         toast({
           title: "Payment Error",
@@ -194,30 +275,10 @@ const Payments = () => {
 
         setPaymentOrder(orderData);
 
-        // Open Cashfree checkout
-        try {
-          const cashfree = await load();
-          
-          const checkoutOptions = {
-            paymentSessionId: orderData.payment_session_id,
-            redirectTarget: "_self" as const
-          };
-
-          cashfree.checkout(checkoutOptions);
-          
-          // Cashfree will handle the payment flow and redirect
-          // Payment status will be updated via webhook
-          setIsProcessing(true);
-        } catch (error: any) {
-          setIsProcessing(false);
-          toast({
-            title: "Payment Error",
-            description: error.message || "Failed to initialize payment. Please try again.",
-            variant: "destructive",
-          });
-        }
+        // Open Cashfree checkout using cashfree.pay()
+        await openCashfreeCheckout(orderData.payment_session_id);
     } catch (error: any) {
-      console.error("Payment error:", error);
+      console.error("❌ DEBUG: Payment error:", error);
         setIsProcessing(false);
       toast({
         title: "Payment Failed",
@@ -261,14 +322,58 @@ const Payments = () => {
       <div className="container mx-auto px-4 py-12">
         <div className="text-center mb-12">
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            {paymentType === "hospital_registration" ? "Complete Payment" : "Choose Your Plan"}
+            {appointmentPaymentData 
+              ? "Complete Payment" 
+              : paymentType === "hospital_registration" 
+                ? "Complete Payment" 
+                : "Choose Your Plan"}
           </h1>
           <p className="text-muted-foreground">
-            {paymentType === "hospital_registration" 
+            {appointmentPaymentData
+              ? "Please complete payment to confirm your appointment"
+              : paymentType === "hospital_registration" 
               ? "Complete payment to proceed with hospital registration"
               : "Select a package and complete payment"}
           </p>
         </div>
+        
+        {/* Resume Payment Button - Show if appointment payment session exists */}
+        {appointmentPaymentData && !isProcessing && (
+          <div className="max-w-xl mx-auto mb-8">
+            <div className="bg-card rounded-2xl shadow-elevated border border-border/50 p-8 text-center">
+              <h2 className="text-xl font-bold text-foreground mb-4">Complete Your Payment</h2>
+              <p className="text-muted-foreground mb-6">
+                Click the button below to resume your payment and complete your appointment booking.
+              </p>
+              <Button
+                onClick={() => openCashfreeCheckout(appointmentPaymentData.paymentSessionId)}
+                variant="hero"
+                size="lg"
+                className="w-full h-12"
+              >
+                <span className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5" />
+                  Resume Payment
+                </span>
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Payment Processing State */}
+        {isProcessing && (
+          <div className="max-w-xl mx-auto mb-8">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6 text-center">
+              <Loader2 className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                Opening Payment Gateway...
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                Please wait while we redirect you to complete your payment.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Package Selection - Only show if not hospital registration */}
         {paymentType !== "hospital_registration" && (
@@ -294,9 +399,9 @@ const Payments = () => {
               </div>
               <div className="mb-4">
                 <div className="text-2xl font-bold text-foreground">₹{pkg.installation.toLocaleString()}</div>
-                <div className="text-sm text-muted-foreground">Installation Fee</div>
+                <div className="text-sm text-muted-foreground">One-Time Software Activation & License Fee</div>
                 <div className="mt-2 text-lg font-semibold text-primary">+ ₹{pkg.monthly.toLocaleString()}/month</div>
-                <div className="text-sm text-muted-foreground">Maintenance</div>
+                <div className="text-sm text-muted-foreground">Monthly Technical Support & Maintenance Charges</div>
               </div>
               <ul className="space-y-2">
                 {pkg.features.map((feature) => (
@@ -329,13 +434,13 @@ const Payments = () => {
                   <span className="font-medium text-foreground">{hospitalData.selectedPlan.name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Installation Fee:</span>
+                  <span className="text-muted-foreground">One-Time Software Activation & License Fee:</span>
                   <span className="font-medium text-foreground">
                     ₹{hospitalData.selectedPlan.installationPrice.toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Monthly Fee:</span>
+                  <span className="text-muted-foreground">Monthly Technical Support & Maintenance Charges:</span>
                   <span className="font-medium text-foreground">
                     ₹{hospitalData.selectedPlan.monthlyPrice.toLocaleString('en-IN')}/month
                   </span>
@@ -486,11 +591,11 @@ const Payments = () => {
               {paymentType !== "hospital_registration" && (
               <div className="mt-6 p-4 bg-muted rounded-xl">
                 <div className="flex justify-between mb-2">
-                  <span className="text-muted-foreground">Installation Fee</span>
+                  <span className="text-muted-foreground">One-Time Software Activation & License Fee</span>
                   <span className="font-semibold text-foreground">₹{selectedPkg?.installation.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between mb-2">
-                  <span className="text-muted-foreground">First Month Maintenance</span>
+                  <span className="text-muted-foreground">First Month Technical Support & Maintenance Charges</span>
                   <span className="font-semibold text-foreground">₹{selectedPkg?.monthly.toLocaleString()}</span>
                 </div>
                 <div className="border-t border-border pt-2 mt-2 flex justify-between">

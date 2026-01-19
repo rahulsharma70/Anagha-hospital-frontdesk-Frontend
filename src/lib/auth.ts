@@ -42,9 +42,19 @@ export const register = async (userData: {
   password: string;
   role?: string;
   email?: string;
+  address_line1?: string;
+  hospital_id?: number;
+  degree?: string;
+  institute_name?: string;
+  company_name?: string;
+  city?: string;
+  state?: string;
+  specialty?: string;
 }): Promise<User> => {
   try {
+    console.log("🔵 DEBUG: Register function called with data:", userData);
     const response = await authAPI.register(userData);
+    console.log("✅ DEBUG: Registration API response:", response);
     setAuthToken(response.access_token);
     // Store user in localStorage for quick access
     if (response.user) {
@@ -52,7 +62,7 @@ export const register = async (userData: {
     }
     return response.user;
   } catch (error) {
-    console.error("Registration error:", error);
+    console.error("❌ DEBUG: Registration error:", error);
     throw error;
   }
 };

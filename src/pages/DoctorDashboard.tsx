@@ -101,13 +101,13 @@ const DoctorDashboard = () => {
   // Calculate stats
   const today = new Date().toISOString().split('T')[0];
   const todayAppointments = appointments.filter(a => a.date === today);
-  const todayOperations = operations.filter(o => o.operation_date === today || o.date === today);
+  const todayOperations = operations.filter(o => o.date === today); // Backend returns 'date' (mapped from 'operation_date')
   const pendingAppointments = appointments.filter(a => a.status === "pending");
   const pendingOperations = operations.filter(o => o.status === "pending");
   const pendingCount = pendingAppointments.length + pendingOperations.length;
   const completedToday = [
     ...appointments.filter(a => a.date === today && (a.status === "completed" || a.status === "visited")),
-    ...operations.filter(o => (o.operation_date === today || o.date === today) && o.status === "completed")
+    ...operations.filter(o => o.date === today && o.status === "completed") // Backend returns 'date'
   ].length;
 
   // Get unique patients from appointments and operations
@@ -145,7 +145,7 @@ const DoctorDashboard = () => {
         id: op.patient_id,
         name: op.patient_name,
         phone: "",
-        lastVisit: op.operation_date || op.date,
+        lastVisit: op.date || "", // Backend returns 'date' (mapped from 'operation_date')
         totalVisits: 1,
         conditions: [op.specialty],
       });
@@ -255,25 +255,25 @@ const DoctorDashboard = () => {
     ...appointments.map(apt => ({
       id: apt.id,
       type: "appointment" as const,
-      patientName: apt.user_name,
+      patientName: apt.user_name || "Unknown Patient",
       phone: "", // Phone not in appointment response
-      date: apt.date,
-      time: apt.time_slot,
-      status: apt.status,
-      notes: apt.reason,
-      hospital: apt.hospital_name,
+      date: apt.date || "",
+      time: apt.time_slot || "",
+      status: apt.status || "pending",
+      notes: apt.reason || "", // Backend doesn't always include reason in list endpoints
+      hospital: apt.hospital_name || "Unknown Hospital",
     })),
     ...operations.map(op => ({
       id: op.id,
       type: "operation" as const,
       patientName: op.patient_name,
       phone: "",
-      date: op.operation_date || op.date,
+      date: op.date || "", // Backend returns 'date' (mapped from 'operation_date')
       time: "", // Operations don't have time slots
       status: op.status,
-      notes: op.notes,
+      notes: op.notes || "", // Backend returns 'notes'
       specialty: op.specialty,
-      hospital: op.hospital_name,
+      hospital: op.hospital_name || "Unknown Hospital",
     })),
   ].sort((a, b) => {
     // Sort by date, then by time

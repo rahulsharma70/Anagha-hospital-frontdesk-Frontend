@@ -167,10 +167,23 @@ const Login = () => {
               </div>
               <div className="relative flex justify-center text-sm">
                 <span className="px-4 bg-card text-muted-foreground">
-                  New to Anagha Health?
+                  Or continue as
                 </span>
               </div>
             </div>
+
+            {/* Guest User Button */}
+            <Button
+              type="button"
+              onClick={() => navigate("/book-appointment")}
+              variant="outline"
+              className="w-full h-12 mb-3"
+            >
+              <span className="flex items-center gap-2">
+                Continue as Guest
+                <ArrowRight className="w-5 h-5" />
+              </span>
+            </Button>
 
             {/* Register Link */}
             <Link to="/register">

@@ -2,7 +2,7 @@
  * Loading Context - Manages global loading states to prevent UI flicker
  */
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 
 interface LoadingContextType {
   isLoading: boolean;
@@ -28,15 +28,16 @@ export const LoadingProvider: React.FC<LoadingProviderProps> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(false);
   const [loadingCount, setLoadingCount] = useState(0);
 
-  const setLoading = (loading: boolean) => {
+  // Memoize setLoading to prevent infinite loops in useEffect dependencies
+  const setLoading = useCallback((loading: boolean) => {
     setLoadingCount((prev) => {
       const newCount = loading ? prev + 1 : Math.max(0, prev - 1);
       setIsLoading(newCount > 0);
       return newCount;
     });
-  };
+  }, []);
 
-  const withLoading = async <T,>(promise: Promise<T>): Promise<T> => {
+  const withLoading = useCallback(async <T,>(promise: Promise<T>): Promise<T> => {
     setLoading(true);
     try {
       const result = await promise;
@@ -44,7 +45,7 @@ export const LoadingProvider: React.FC<LoadingProviderProps> = ({ children }) =>
     } finally {
       setLoading(false);
     }
-  };
+  }, [setLoading]);
 
   const value: LoadingContextType = {
     isLoading,

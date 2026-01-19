@@ -74,11 +74,11 @@ const PatientDashboard = () => {
               doctorName: op.doctor_name || "Unknown Doctor",
               hospital: op.hospital_name || "Unknown Hospital",
               specialty: op.specialty,
-              date: op.date || op.operation_date || "",
-              time: op.time_slot || "",
+              date: op.date || "", // Backend returns 'date' (mapped from 'operation_date')
+              time: "", // Operations don't have time slots, only dates
               type: "Operation",
               status: op.status || "pending",
-              notes: op.notes
+              notes: op.notes || "" // Backend returns 'notes', not 'reason'
             });
           });
         }
