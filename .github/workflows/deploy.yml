@@ -24,13 +24,12 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Upload build to server
-        uses: appleboy/scp-action@v0.1.7
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
-          host: ${{ secrets.FTP_HOST }}
+          server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           port: ${{ secrets.FTP_PORT }}
-          source: "dist/*"
-          target: "/home/${{ secrets.FTP_USERNAME }}/public_html"
-          strip_components: 1
+          local-dir: dist/
+          server-dir: public_html/
